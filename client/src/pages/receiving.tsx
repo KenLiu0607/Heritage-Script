@@ -20,12 +20,23 @@ import {
   ThermometerSun,
   Scale,
   Package,
-  Bird
+  Bird,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef } from "react";
 import { read, utils } from "xlsx";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Mock data based on the user's Excel image
 const initialReceipts = [
@@ -45,6 +56,8 @@ const initialReceipts = [
 
 export default function Receiving() {
   const [receipts, setReceipts] = useState(initialReceipts);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -54,6 +67,16 @@ export default function Receiving() {
   
   const frozenWeight = receipts.filter(r => r.type === 'frozen').reduce((acc, curr) => acc + curr.weight, 0);
   const chilledWeight = receipts.filter(r => r.type === 'chilled').reduce((acc, curr) => acc + curr.weight, 0);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(receipts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = receipts.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -98,6 +121,7 @@ export default function Receiving() {
 
         if (newReceipts.length > 0) {
           setReceipts(prev => [...newReceipts, ...prev]);
+          setCurrentPage(1); // Reset to first page on new upload
           toast({
             title: "匯入成功",
             description: `已成功匯入 ${newReceipts.length} 筆資料`,
@@ -232,7 +256,7 @@ export default function Receiving() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {receipts.map((row) => (
+              {currentItems.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-mono text-muted-foreground">{row.date}</TableCell>
                   <TableCell>
@@ -262,6 +286,73 @@ export default function Receiving() {
               ))}
             </TableBody>
           </Table>
+          
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between px-4 py-4 border-t border-border">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">每頁顯示</span>
+              <Select 
+                value={String(itemsPerPage)} 
+                onValueChange={(val) => {
+                  setItemsPerPage(Number(val));
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[70px] h-8">
+                  <SelectValue placeholder="10" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-muted-foreground">筆，共 {receipts.length} 筆</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={() => handlePageChange(1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium min-w-[3rem] text-center">
+                {currentPage} / {totalPages || 1}
+              </span>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || totalPages === 0}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => handlePageChange(totalPages)}
+                disabled={currentPage === totalPages || totalPages === 0}
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
