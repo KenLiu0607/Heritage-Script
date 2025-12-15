@@ -10,6 +10,9 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
+import { receivingService } from "@/services/receivingService";
+import { ReceiptItem } from "@/types/domain";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Search, 
   Filter, 
@@ -17,14 +20,15 @@ import {
   Download, 
   Upload, 
   Snowflake, 
-  ThermometerSun,
-  Scale,
-  Package,
+  ThermometerSun, 
+  Scale, 
+  Package, 
   Bird,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef } from "react";
@@ -38,35 +42,41 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// Mock data based on the user's Excel image
-const initialReceipts = [
-  { id: 1, date: "2025/12/01", weightClass: "1.4", name: "古早公全雞-1.4(套袋)", type: "frozen", boxes: 3, count: 30, weight: 44.41 },
-  { id: 2, date: "2025/12/01", weightClass: "2.4", name: "古早公全雞-2.4(套袋)", type: "frozen", boxes: 128, count: 768, weight: 1933.32 },
-  { id: 3, date: "2025/12/01", weightClass: "2.6", name: "古早公全雞-2.6(套袋)", type: "frozen", boxes: 37, count: 222, weight: 600.84 },
-  { id: 4, date: "2025/12/01", weightClass: "2.8", name: "古早公全雞-2.8(套袋)", type: "frozen", boxes: 4, count: 24, weight: 69.24 },
-  { id: 5, date: "2025/12/01", weightClass: "3.0", name: "古早公全雞-3.0(套袋)", type: "frozen", boxes: 1, count: 5, weight: 15.40 },
-  { id: 6, date: "2025/12/01", weightClass: "1.5", name: "古早母全雞-1.5(套袋)", type: "chilled", boxes: 9, count: 90, weight: 139.61 },
-  { id: 7, date: "2025/12/01", weightClass: "1.6", name: "古早母全雞-1.6(套袋)", type: "chilled", boxes: 13, count: 130, weight: 214.85 },
-  { id: 8, date: "2025/12/01", weightClass: "1.7", name: "古早母全雞-1.7(套袋)", type: "chilled", boxes: 21, count: 210, weight: 367.58 },
-  { id: 9, date: "2025/12/01", weightClass: "1.8", name: "古早母全雞-1.8(套袋)", type: "chilled", boxes: 34, count: 340, weight: 629.27 },
-  { id: 10, date: "2025/12/01", weightClass: "1.9", name: "古早母全雞-1.9(套袋)", type: "chilled", boxes: 47, count: 470, weight: 917.13 },
-  { id: 11, date: "2025/12/01", weightClass: "2.0", name: "古早母全雞-2.0(套袋)", type: "chilled", boxes: 139, count: 1390, weight: 2930.94 },
-  { id: 12, date: "2025/12/01", weightClass: "2.2", name: "古早母全雞-2.2(套袋)", type: "chilled", boxes: 142, count: 1420, weight: 3254.61 },
-];
-
 export default function Receiving() {
-  const [receipts, setReceipts] = useState(initialReceipts);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const totalWeight = receipts.reduce((acc, curr) => acc + curr.weight, 0);
-  const totalBoxes = receipts.reduce((acc, curr) => acc + curr.boxes, 0);
-  const totalCount = receipts.reduce((acc, curr) => acc + curr.count, 0);
-  
-  const frozenWeight = receipts.filter(r => r.type === 'frozen').reduce((acc, curr) => acc + curr.weight, 0);
-  const chilledWeight = receipts.filter(r => r.type === 'chilled').reduce((acc, curr) => acc + curr.weight, 0);
+  // 1. 使用 Service Layer 獲取資料
+  const { data: receipts = [], isLoading } = useQuery({
+    queryKey: ['receipts'],
+    queryFn: receivingService.getAll
+  });
+
+  // 2. 商業邏輯運算 (Summary)
+  const summary = receivingService.calculateSummary(receipts);
+
+  // 3. Mutation: 處理匯入
+  const importMutation = useMutation({
+    mutationFn: receivingService.importBatch,
+    onSuccess: (newItems) => {
+      queryClient.setQueryData(['receipts'], (old: ReceiptItem[] = []) => [...newItems, ...old]);
+      setCurrentPage(1);
+      toast({
+        title: "匯入成功",
+        description: `已成功匯入 ${newItems.length} 筆資料`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "匯入失敗",
+        description: "資料處理發生錯誤",
+        variant: "destructive"
+      });
+    }
+  });
 
   // Pagination Logic
   const totalPages = Math.ceil(receipts.length / itemsPerPage);
@@ -94,22 +104,14 @@ export default function Receiving() {
         // Helper to format date
         const formatDate = (val: any) => {
           if (!val) return new Date().toISOString().split('T')[0];
-          // Handle Excel serial date (number)
           if (typeof val === 'number') {
-            // Excel base date is 1900-01-01, but there is a leap year bug in 1900
-            // JS base is 1970-01-01.
-            // 25569 is days between 1900-01-01 and 1970-01-01
             const date = new Date((val - 25569) * 86400 * 1000);
             return date.toISOString().split('T')[0].replace(/-/g, '/');
           }
-          // Handle string date
           return String(val);
         };
 
-        // Map Excel columns to our data structure
-        // Assuming Excel headers: 生產日期, 重量分布, 肉品名稱, 冷凍別, 箱數, 隻數, 重量
-        const newReceipts = data.map((row: any, index: number) => ({
-          id: Date.now() + index,
+        const newItems: Omit<ReceiptItem, 'id'>[] = data.map((row: any) => ({
           date: formatDate(row['生產日期']),
           weightClass: String(row['重量分布'] || row['規格'] || '0.0'),
           name: row['肉品名稱'] || row['品名'] || 'Unknown',
@@ -119,13 +121,8 @@ export default function Receiving() {
           weight: Number(row['重量'] || 0)
         }));
 
-        if (newReceipts.length > 0) {
-          setReceipts(prev => [...newReceipts, ...prev]);
-          setCurrentPage(1); // Reset to first page on new upload
-          toast({
-            title: "匯入成功",
-            description: `已成功匯入 ${newReceipts.length} 筆資料`,
-          });
+        if (newItems.length > 0) {
+          importMutation.mutate(newItems);
         }
       } catch (error) {
         console.error("Error parsing excel:", error);
@@ -137,11 +134,18 @@ export default function Receiving() {
       }
     };
     reader.readAsBinaryString(file);
-    // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -158,8 +162,8 @@ export default function Receiving() {
             className="hidden" 
             accept=".xlsx,.xls,.csv"
           />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="mr-2 h-4 w-4" />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importMutation.isPending}>
+            {importMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
             匯入 Excel
           </Button>
           <Button variant="outline">
@@ -181,7 +185,7 @@ export default function Receiving() {
             <Scale className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-primary">{totalWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal text-muted-foreground">kg</span></div>
+            <div className="text-2xl font-bold font-mono text-primary">{summary.totalWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal text-muted-foreground">kg</span></div>
             <p className="text-xs text-muted-foreground mt-1">本批次總計</p>
           </CardContent>
         </Card>
@@ -192,8 +196,10 @@ export default function Receiving() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono">{totalBoxes} <span className="text-sm font-normal text-muted-foreground">箱</span> / {totalCount.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">隻</span></div>
-            <p className="text-xs text-muted-foreground mt-1">平均每箱 {Math.round(totalCount/totalBoxes)} 隻</p>
+            <div className="text-2xl font-bold font-mono">{summary.totalBoxes} <span className="text-sm font-normal text-muted-foreground">箱</span> / {summary.totalCount.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">隻</span></div>
+            <p className="text-xs text-muted-foreground mt-1">
+              平均每箱 {summary.totalBoxes > 0 ? Math.round(summary.totalCount/summary.totalBoxes) : 0} 隻
+            </p>
           </CardContent>
         </Card>
 
@@ -204,10 +210,10 @@ export default function Receiving() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-sky-700 dark:text-sky-400">
-              {Math.round((frozenWeight / totalWeight) * 100)}%
+              {summary.frozenPercentage}%
             </div>
             <p className="text-xs text-sky-600/80 dark:text-sky-400/70 mt-1">
-              {frozenWeight.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg
+              {summary.frozenWeight.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg
             </p>
           </CardContent>
         </Card>
@@ -219,10 +225,10 @@ export default function Receiving() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-400">
-              {Math.round((chilledWeight / totalWeight) * 100)}%
+              {summary.chilledPercentage}%
             </div>
             <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-1">
-              {chilledWeight.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg
+              {summary.chilledWeight.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg
             </p>
           </CardContent>
         </Card>
@@ -280,7 +286,7 @@ export default function Receiving() {
                   <TableCell className="text-right font-mono">{row.count}</TableCell>
                   <TableCell className="text-right font-mono font-bold">{row.weight.toFixed(2)}</TableCell>
                   <TableCell className="text-right font-mono text-muted-foreground">
-                    {(row.weight / row.count).toFixed(2)}
+                    {row.count > 0 ? (row.weight / row.count).toFixed(2) : "0.00"}
                   </TableCell>
                 </TableRow>
               ))}
