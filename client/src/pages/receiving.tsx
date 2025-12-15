@@ -23,9 +23,12 @@ import {
   Bird
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState, useRef } from "react";
+import { read, utils } from "xlsx";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock data based on the user's Excel image
-const receipts = [
+const initialReceipts = [
   { id: 1, date: "2025/12/01", weightClass: "1.4", name: "古早公全雞-1.4(套袋)", type: "frozen", boxes: 3, count: 30, weight: 44.41 },
   { id: 2, date: "2025/12/01", weightClass: "2.4", name: "古早公全雞-2.4(套袋)", type: "frozen", boxes: 128, count: 768, weight: 1933.32 },
   { id: 3, date: "2025/12/01", weightClass: "2.6", name: "古早公全雞-2.6(套袋)", type: "frozen", boxes: 37, count: 222, weight: 600.84 },
@@ -41,12 +44,65 @@ const receipts = [
 ];
 
 export default function Receiving() {
+  const [receipts, setReceipts] = useState(initialReceipts);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
   const totalWeight = receipts.reduce((acc, curr) => acc + curr.weight, 0);
   const totalBoxes = receipts.reduce((acc, curr) => acc + curr.boxes, 0);
   const totalCount = receipts.reduce((acc, curr) => acc + curr.count, 0);
   
   const frozenWeight = receipts.filter(r => r.type === 'frozen').reduce((acc, curr) => acc + curr.weight, 0);
   const chilledWeight = receipts.filter(r => r.type === 'chilled').reduce((acc, curr) => acc + curr.weight, 0);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = utils.sheet_to_json(ws);
+        
+        // Map Excel columns to our data structure
+        // Assuming Excel headers: 生產日期, 重量分布, 肉品名稱, 冷凍別, 箱數, 隻數, 重量
+        const newReceipts = data.map((row: any, index: number) => ({
+          id: Date.now() + index,
+          date: row['生產日期'] || new Date().toISOString().split('T')[0],
+          weightClass: String(row['重量分布'] || row['規格'] || '0.0'),
+          name: row['肉品名稱'] || row['品名'] || 'Unknown',
+          type: (row['冷凍別'] || '').includes('冷藏') ? 'chilled' : 'frozen',
+          boxes: Number(row['箱數'] || 0),
+          count: Number(row['隻數'] || 0),
+          weight: Number(row['重量'] || 0)
+        }));
+
+        if (newReceipts.length > 0) {
+          setReceipts(prev => [...newReceipts, ...prev]);
+          toast({
+            title: "匯入成功",
+            description: `已成功匯入 ${newReceipts.length} 筆資料`,
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing excel:", error);
+        toast({
+          title: "匯入失敗",
+          description: "檔案格式錯誤或無法讀取",
+          variant: "destructive"
+        });
+      }
+    };
+    reader.readAsBinaryString(file);
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -56,7 +112,14 @@ export default function Receiving() {
           <p className="text-muted-foreground">進貨驗收、規格分級與入庫紀錄</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            className="hidden" 
+            accept=".xlsx,.xls,.csv"
+          />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-2 h-4 w-4" />
             匯入 Excel
           </Button>
