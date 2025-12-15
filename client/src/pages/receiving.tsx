@@ -68,11 +68,26 @@ export default function Receiving() {
         const ws = wb.Sheets[wsname];
         const data = utils.sheet_to_json(ws);
         
+        // Helper to format date
+        const formatDate = (val: any) => {
+          if (!val) return new Date().toISOString().split('T')[0];
+          // Handle Excel serial date (number)
+          if (typeof val === 'number') {
+            // Excel base date is 1900-01-01, but there is a leap year bug in 1900
+            // JS base is 1970-01-01.
+            // 25569 is days between 1900-01-01 and 1970-01-01
+            const date = new Date((val - 25569) * 86400 * 1000);
+            return date.toISOString().split('T')[0].replace(/-/g, '/');
+          }
+          // Handle string date
+          return String(val);
+        };
+
         // Map Excel columns to our data structure
         // Assuming Excel headers: 生產日期, 重量分布, 肉品名稱, 冷凍別, 箱數, 隻數, 重量
         const newReceipts = data.map((row: any, index: number) => ({
           id: Date.now() + index,
-          date: row['生產日期'] || new Date().toISOString().split('T')[0],
+          date: formatDate(row['生產日期']),
           weightClass: String(row['重量分布'] || row['規格'] || '0.0'),
           name: row['肉品名稱'] || row['品名'] || 'Unknown',
           type: (row['冷凍別'] || '').includes('冷藏') ? 'chilled' : 'frozen',
