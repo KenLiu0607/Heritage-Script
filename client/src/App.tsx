@@ -9,12 +9,14 @@ import Dashboard from "@/pages/dashboard";
 import Production from "@/pages/production";
 import Inventory from "@/pages/inventory";
 import Sales from "@/pages/sales";
+import Receiving from "@/pages/receiving";
 
 function Router() {
   return (
     <Layout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/receiving" component={Receiving} />
         <Route path="/production" component={Production} />
         <Route path="/inventory" component={Inventory} />
         <Route path="/sales" component={Sales} />

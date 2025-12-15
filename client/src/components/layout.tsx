@@ -7,7 +7,8 @@ import {
   BarChart3, 
   Settings, 
   Menu,
-  Bell
+  Bell,
+  Truck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const navigation = [
     { name: "儀表板", href: "/", icon: LayoutDashboard },
+    { name: "契作交貨", href: "/receiving", icon: Truck },
     { name: "生產排程", href: "/production", icon: Factory },
     { name: "庫存管理", href: "/inventory", icon: Package },
     { name: "銷售訂單", href: "/sales", icon: ShoppingCart },
