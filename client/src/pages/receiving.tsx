@@ -38,6 +38,8 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import type { ContractDelivery } from "@shared/schema";
+import { read, utils } from "xlsx";
+import { cn } from "@/lib/utils";
 
 interface EditableCellProps {
   value: string | number;
@@ -62,7 +64,6 @@ function EditableCell({ value, onSave, type = "text", precision, isInteger, clas
   const handleBlur = () => {
     setIsEditing(false);
     if (tempValue !== String(value)) {
-      // Validation
       if (type === "number") {
         const num = parseFloat(tempValue);
         if (isNaN(num)) return;
@@ -108,11 +109,10 @@ function EditableCell({ value, onSave, type = "text", precision, isInteger, clas
   );
 }
 
-import { cn } from "@/lib/utils";
-
 export default function Receiving() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -134,8 +134,71 @@ export default function Receiving() {
     }
   });
 
+  const importMutation = useMutation({
+    mutationFn: async (items: any[]) => {
+      const res = await apiRequest("POST", "/api/deliveries/batch", items);
+      return res.json();
+    },
+    onSuccess: (newItems) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/deliveries'] });
+      setCurrentPage(1);
+      toast({
+        title: "匯入成功",
+        description: `已成功匯入 ${newItems.length} 筆資料`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "匯入失敗",
+        description: "資料處理發生錯誤",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleUpdate = (id: number, field: string, value: any) => {
     updateMutation.mutate({ id, data: { [field]: value } });
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = utils.sheet_to_json(ws);
+        
+        const newItems = data.map((row: any) => ({
+          freezingType: (row['冷凍別'] || '').includes('冷藏') ? '冷藏' : '冷凍',
+          meatName: row['肉品名稱'] || row['品名'] || 'Unknown',
+          weightGrade: String(row['重量分布'] || row['規格'] || '0.0'),
+          boxCount: Number(row['箱數'] || 0),
+          pieceCount: Number(row['隻數'] || 0),
+          totalWeight: String(row['重量'] || 0),
+          avgWeight: Number(row['隻數']) > 0 ? (Number(row['重量']) / Number(row['隻數'])).toFixed(2) : "0.00"
+        }));
+
+        if (newItems.length > 0) {
+          importMutation.mutate(newItems);
+        }
+      } catch (error) {
+        console.error("Error parsing excel:", error);
+        toast({
+          title: "匯入失敗",
+          description: "檔案格式錯誤或無法讀取",
+          variant: "destructive"
+        });
+      }
+    };
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // Pagination Logic
@@ -163,7 +226,17 @@ export default function Receiving() {
           <p className="text-muted-foreground">進貨驗收、規格分級與入庫紀錄</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> 匯入 Excel</Button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            className="hidden" 
+            accept=".xlsx,.xls,.csv"
+          />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importMutation.isPending}>
+            {importMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            匯入 Excel
+          </Button>
           <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 匯出報表</Button>
           <Button><Plus className="mr-2 h-4 w-4" /> 新增驗收單</Button>
         </div>

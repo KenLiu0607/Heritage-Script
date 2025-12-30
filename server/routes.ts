@@ -12,6 +12,22 @@ export async function registerRoutes(
     res.json(deliveries);
   });
 
+  app.post("/api/deliveries/batch", async (req, res) => {
+    const items = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: "Invalid input" });
+    }
+    const createdItems = [];
+    for (const item of items) {
+      const result = insertContractDeliverySchema.safeParse(item);
+      if (result.success) {
+        const created = await storage.createDelivery(result.data);
+        createdItems.push(created);
+      }
+    }
+    res.json(createdItems);
+  });
+
   app.patch("/api/deliveries/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const result = insertContractDeliverySchema.partial().safeParse(req.body);

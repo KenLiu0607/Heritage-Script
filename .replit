@@ -44,3 +44,6 @@ outputType = "webview"
 [agent]
 mockupState = "FULLSTACK"
 expertMode = true
+
+[objectStorage]
+defaultBucketID = "replit-objstore-4615d639-5a2d-4ce2-8604-b4fbd8306a22"
