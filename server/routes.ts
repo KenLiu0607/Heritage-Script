@@ -17,15 +17,12 @@ export async function registerRoutes(
     if (!Array.isArray(items)) {
       return res.status(400).json({ error: "Invalid input" });
     }
-    const createdItems = [];
-    for (const item of items) {
-      const result = insertContractDeliverySchema.safeParse(item);
-      if (result.success) {
-        const created = await storage.createDelivery(result.data);
-        createdItems.push(created);
-      }
+    try {
+      const createdItems = await storage.createBatchDeliveries(items);
+      res.json(createdItems);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
-    res.json(createdItems);
   });
 
   app.patch("/api/deliveries/:id", async (req, res) => {
