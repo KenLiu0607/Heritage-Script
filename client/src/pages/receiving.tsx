@@ -136,7 +136,9 @@ export default function Receiving() {
 
   const importMutation = useMutation({
     mutationFn: async (items: any[]) => {
-      const res = await apiRequest("POST", "/api/deliveries/batch", items);
+      // Exclude ID to allow DB to generate it
+      const sanitizedItems = items.map(({ id, ...rest }) => rest);
+      const res = await apiRequest("POST", "/api/deliveries/batch", sanitizedItems);
       return res.json();
     },
     onSuccess: (newItems) => {
