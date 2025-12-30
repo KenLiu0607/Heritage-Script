@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const contractDeliveries = pgTable("contract_deliveries", {
   id: serial("id").primaryKey(),
-  freezingType: text("freezing_type").notNull(), // 冷凍, 冷藏
+  freezingType: text("freezing_type").notNull(),
   meatName: text("meat_name").notNull(),
   weightGrade: decimal("weight_grade", { precision: 10, scale: 1 }).notNull(),
   boxCount: integer("box_count").notNull(),

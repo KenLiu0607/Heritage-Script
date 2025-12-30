@@ -1,49 +1,43 @@
-import { type ContractDelivery, type InsertContractDelivery } from "@shared/schema";
+import { type ContractDelivery, type InsertContractDelivery, contractDeliveries } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   getDeliveries(): Promise<ContractDelivery[]>;
   updateDelivery(id: number, delivery: Partial<InsertContractDelivery>): Promise<ContractDelivery>;
   createDelivery(delivery: InsertContractDelivery): Promise<ContractDelivery>;
+  createBatchDeliveries(deliveries: InsertContractDelivery[]): Promise<ContractDelivery[]>;
 }
 
-export class MemStorage implements IStorage {
-  private deliveries: Map<number, ContractDelivery>;
-  private currentId: number;
-
-  constructor() {
-    this.deliveries = new Map();
-    this.currentId = 1;
-    
-    // Seed some data
-    this.createDelivery({
-      freezingType: "冷凍",
-      meatName: "大雞腿",
-      weightGrade: "1.5",
-      boxCount: 10,
-      pieceCount: 100,
-      totalWeight: "150.00",
-      avgWeight: "1.50"
-    });
-  }
-
+export class DatabaseStorage implements IStorage {
   async getDeliveries(): Promise<ContractDelivery[]> {
-    return Array.from(this.deliveries.values());
+    return await db.select().from(contractDeliveries);
   }
 
   async updateDelivery(id: number, update: Partial<InsertContractDelivery>): Promise<ContractDelivery> {
-    const existing = this.deliveries.get(id);
-    if (!existing) throw new Error("Delivery not found");
-    const updated = { ...existing, ...update } as ContractDelivery;
-    this.deliveries.set(id, updated);
+    const [updated] = await db
+      .update(contractDeliveries)
+      .set(update)
+      .where(eq(contractDeliveries.id, id))
+      .returning();
+    if (!updated) throw new Error("Delivery not found");
     return updated;
   }
 
   async createDelivery(delivery: InsertContractDelivery): Promise<ContractDelivery> {
-    const id = this.currentId++;
-    const newDelivery: ContractDelivery = { ...delivery, id } as ContractDelivery;
-    this.deliveries.set(id, newDelivery);
+    const [newDelivery] = await db
+      .insert(contractDeliveries)
+      .values(delivery)
+      .returning();
     return newDelivery;
+  }
+
+  async createBatchDeliveries(deliveries: InsertContractDelivery[]): Promise<ContractDelivery[]> {
+    return await db
+      .insert(contractDeliveries)
+      .values(deliveries)
+      .returning();
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

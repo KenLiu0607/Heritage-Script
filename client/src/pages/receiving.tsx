@@ -237,8 +237,10 @@ export default function Receiving() {
             {importMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
             匯入 Excel
           </Button>
+          <Button variant="default" onClick={() => importMutation.mutate(deliveries)} disabled={importMutation.isPending || deliveries.length === 0}>
+             <Plus className="mr-2 h-4 w-4" /> 儲存至資料庫
+          </Button>
           <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 匯出報表</Button>
-          <Button><Plus className="mr-2 h-4 w-4" /> 新增驗收單</Button>
         </div>
       </div>
 
