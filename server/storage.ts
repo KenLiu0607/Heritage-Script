@@ -1,37 +1,48 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { type ContractDelivery, type InsertContractDelivery } from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getDeliveries(): Promise<ContractDelivery[]>;
+  updateDelivery(id: number, delivery: Partial<InsertContractDelivery>): Promise<ContractDelivery>;
+  createDelivery(delivery: InsertContractDelivery): Promise<ContractDelivery>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private deliveries: Map<number, ContractDelivery>;
+  private currentId: number;
 
   constructor() {
-    this.users = new Map();
+    this.deliveries = new Map();
+    this.currentId = 1;
+    
+    // Seed some data
+    this.createDelivery({
+      freezingType: "冷凍",
+      meatName: "大雞腿",
+      weightGrade: "1.5",
+      boxCount: 10,
+      pieceCount: 100,
+      totalWeight: "150.00",
+      avgWeight: "1.50"
+    });
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getDeliveries(): Promise<ContractDelivery[]> {
+    return Array.from(this.deliveries.values());
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async updateDelivery(id: number, update: Partial<InsertContractDelivery>): Promise<ContractDelivery> {
+    const existing = this.deliveries.get(id);
+    if (!existing) throw new Error("Delivery not found");
+    const updated = { ...existing, ...update } as ContractDelivery;
+    this.deliveries.set(id, updated);
+    return updated;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async createDelivery(delivery: InsertContractDelivery): Promise<ContractDelivery> {
+    const id = this.currentId++;
+    const newDelivery: ContractDelivery = { ...delivery, id } as ContractDelivery;
+    this.deliveries.set(id, newDelivery);
+    return newDelivery;
   }
 }
 
