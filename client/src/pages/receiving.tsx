@@ -112,6 +112,7 @@ function EditableCell({ value, onSave, type = "text", precision, isInteger, clas
 export default function Receiving() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pendingDeliveries, setPendingDeliveries] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -143,15 +144,16 @@ export default function Receiving() {
     },
     onSuccess: (newItems) => {
       queryClient.invalidateQueries({ queryKey: ['/api/deliveries'] });
+      setPendingDeliveries([]);
       setCurrentPage(1);
       toast({
-        title: "匯入成功",
-        description: `已成功匯入 ${newItems.length} 筆資料`,
+        title: "儲存成功",
+        description: `已成功儲存 ${newItems.length} 筆資料至資料庫`,
       });
     },
     onError: () => {
       toast({
-        title: "匯入失敗",
+        title: "儲存失敗",
         description: "資料處理發生錯誤",
         variant: "destructive"
       });
@@ -186,7 +188,11 @@ export default function Receiving() {
         }));
 
         if (newItems.length > 0) {
-          importMutation.mutate(newItems);
+          setPendingDeliveries(newItems);
+          toast({
+            title: "匯入成功",
+            description: `已預覽 ${newItems.length} 筆資料，請檢查後點擊「儲存至資料庫」進行儲存`,
+          });
         }
       } catch (error) {
         console.error("Error parsing excel:", error);
@@ -203,12 +209,15 @@ export default function Receiving() {
     }
   };
 
+  // Use pending deliveries if they exist, otherwise use saved deliveries
+  const displayDeliveries = pendingDeliveries.length > 0 ? pendingDeliveries : deliveries;
+  
   // Pagination Logic
-  const totalPages = Math.ceil(deliveries.length / itemsPerPage);
+  const totalPages = Math.ceil(displayDeliveries.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentItems = deliveries.slice(startIndex, startIndex + itemsPerPage);
+  const currentItems = displayDeliveries.slice(startIndex, startIndex + itemsPerPage);
 
-  if (isLoading) {
+  if (isLoading && pendingDeliveries.length === 0) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -216,9 +225,9 @@ export default function Receiving() {
     );
   }
 
-  const totalWeight = deliveries.reduce((acc, d) => acc + parseFloat(String(d.totalWeight)), 0);
-  const totalBoxes = deliveries.reduce((acc, d) => acc + d.boxCount, 0);
-  const totalPieceCount = deliveries.reduce((acc, d) => acc + d.pieceCount, 0);
+  const totalWeight = displayDeliveries.reduce((acc, d) => acc + parseFloat(String(d.totalWeight)), 0);
+  const totalBoxes = displayDeliveries.reduce((acc, d) => acc + d.boxCount, 0);
+  const totalPieceCount = displayDeliveries.reduce((acc, d) => acc + d.pieceCount, 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -235,14 +244,38 @@ export default function Receiving() {
             className="hidden" 
             accept=".xlsx,.xls,.csv"
           />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importMutation.isPending}>
+          <Button 
+            variant="outline" 
+            onClick={() => fileInputRef.current?.click()} 
+            disabled={importMutation.isPending}
+            data-testid="button-upload-excel"
+          >
             {importMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
             匯入 Excel
           </Button>
-          <Button variant="default" onClick={() => importMutation.mutate(deliveries)} disabled={importMutation.isPending || deliveries.length === 0}>
-             <Plus className="mr-2 h-4 w-4" /> 儲存至資料庫
-          </Button>
-          <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 匯出報表</Button>
+          {pendingDeliveries.length > 0 && (
+            <>
+              <Button 
+                variant="default" 
+                onClick={() => importMutation.mutate(pendingDeliveries)} 
+                disabled={importMutation.isPending}
+                data-testid="button-save-to-db"
+              >
+                <Plus className="mr-2 h-4 w-4" /> 儲存至資料庫
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setPendingDeliveries([])}
+                disabled={importMutation.isPending}
+                data-testid="button-clear-pending"
+              >
+                清除預覽
+              </Button>
+            </>
+          )}
+          {pendingDeliveries.length === 0 && deliveries.length > 0 && (
+            <Button variant="outline"><Download className="mr-2 h-4 w-4" /> 匯出報表</Button>
+          )}
         </div>
       </div>
 
